@@ -1,0 +1,9 @@
+workspace:
+  base: /usr/local/src
+  path: github.com/qnib/go-rcudad/
+
+pipeline:
+  x86:
+    image: qnib/uplain-golang
+    commands:
+      - go build -o ./bundle/go-rcudad
