@@ -3,18 +3,23 @@ package prom
 import (
 	"github.com/prometheus/client_golang/prometheus"
 	"fmt"
+	"regexp"
 )
 
 type Metrics struct {
-	gauges map[string]prometheus.Gauge
+	debug 	bool
+	gauges  map[string]prometheus.Gauge
 	counter map[string]prometheus.Counter
+	rMatchCnt map[string]string
 }
 
 
-func NewMetrics() Metrics {
+func NewMetrics(debug bool) Metrics {
 	m := Metrics{
+		debug: debug,
 		gauges: map[string]prometheus.Gauge{},
 		counter: map[string]prometheus.Counter{},
+		rMatchCnt: map[string]string{},
 	}
 	m.counter["log_count"] = prometheus.NewCounter(prometheus.CounterOpts{
 		Namespace: "rcuda",
@@ -29,6 +34,35 @@ func NewMetrics() Metrics {
 		Help:      "How often did the loop restart",
 	})
 	return m
+}
+
+// AddRMatchCnt will increment in case the regex matches
+func (m *Metrics) AddRMatchCnt(name, sub, help, reg string) {
+	if _, ok := m.counter[name];ok {
+		fmt.Printf("Counter '%s' already exists\n", name)
+		return
+	}
+	m.counter[name] = prometheus.NewCounter(prometheus.CounterOpts{
+		Namespace: "rcuda",
+		Subsystem: sub,
+		Name:      name,
+		Help:      help,
+	})
+	m.rMatchCnt[name] = reg
+
+}
+
+func (m *Metrics) CheckLine(line string) {
+	m.CounterInc("log_count")
+	for k, r := range m.rMatchCnt {
+		if matched, err := regexp.MatchString(r, line); err == nil && matched {
+			m.CounterInc(k)
+		} else if m.debug {
+			fmt.Printf("    >> '%s' does not match '%s'\n", r, line)
+		} else {
+			fmt.Println(line)
+		}
+	}
 }
 
 func (m *Metrics) CounterInc(name string) (err error) {
@@ -50,3 +84,4 @@ func (m *Metrics) Register() {
 		prometheus.MustRegister(c)
 	}
 }
+

@@ -33,18 +33,14 @@ func startDaemon(m prom.Metrics) {
 		scanner := bufio.NewScanner(stdoutIn)
 		for scanner.Scan() {
 			line := scanner.Text()
-			// Log the stdout
-			m.CounterInc("log_count")
-			fmt.Println(line)
+			m.CheckLine(line)
 		}
 	}()
 	go func() {
 		scanner := bufio.NewScanner(stderrIn)
 		for scanner.Scan() {
 			line := scanner.Text()
-			// Log the stderr
-			m.CounterInc("log_count")
-			fmt.Println(line)
+			m.CheckLine(line)
 		}
 	}()
 
@@ -69,7 +65,16 @@ func startProm(ctx *cli.Context) {
 func Run(ctx *cli.Context) {
     // start prometheus
 	go startProm(ctx)
-	m := prom.NewMetrics()
+	m := prom.NewMetrics(ctx.Bool("debug"))
+	m.AddRMatchCnt(
+		"app_finished", "daemon", "How often was the rCUDA client finished correctly.",
+		`.*: Remote application finished with \d+ threads.`)
+	m.AddRMatchCnt(
+		"device_1_set", "daemon", "Device 1 set for the first time.",
+		`.*: Device 1 set for first time.`)
+	m.AddRMatchCnt(
+		"device_0_init", "daemon", "CUDA initialized on device 0.",
+		`CUDA initialized on device 0.`)
 	m.Register()
 	for {
 		startDaemon(m)
@@ -89,6 +94,12 @@ func main() {
 			Value: "0.0.0.0:8081",
 			Usage: "IP:PORT to bind prometheus",
 			EnvVar: "RCUDAD_PROMETHEUS_ADDR",
+		},
+		cli.BoolFlag{
+			Name: "debug",
+			Usage: "Be more verbose..",
+			EnvVar: "RCUDAD_DEBUG",
+
 		},
 	}
 	app.Action = Run
