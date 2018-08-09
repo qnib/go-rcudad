@@ -14,7 +14,7 @@ import (
 	"bufio"
 )
 
-const VERSION="0.1.0"
+const VERSION="0.1.1"
 
 type Metrics struct {
 	gauges map[string]prometheus.Gauge
