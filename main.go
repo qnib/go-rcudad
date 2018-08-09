@@ -5,57 +5,17 @@ import (
 	"fmt"
 		"log"
 	"os/exec"
-	"flag"
-	"net/http"
-	"github.com/prometheus/client_golang/prometheus"
+		"net/http"
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"time"
 	"bufio"
+	"github.com/qnib/go-rcudad/prom"
+	"os"
+		"github.com/codegangsta/cli"
 )
 
-const VERSION="0.1.1"
-
-type Metrics struct {
-	gauges map[string]prometheus.Gauge
-	counter map[string]prometheus.Counter
-}
-
-func NewMetrics() Metrics {
-	m := Metrics{
-		gauges: map[string]prometheus.Gauge{},
-		counter: map[string]prometheus.Counter{},
-	}
-	m.gauges["log_count"] = prometheus.NewGauge(prometheus.GaugeOpts{
-		Namespace: "rcuda",
-		Subsystem: "daemon",
-		Name:      "log_count",
-		Help:      "Number of loglines",
-	})
-	m.counter["restart_count"] = prometheus.NewCounter(prometheus.CounterOpts{
-		Namespace: "rcuda",
-		Subsystem: "daemon",
-		Name:      "restart_count",
-		Help:      "How often did the loop restart",
-	})
-	return m
-}
-
-func (m *Metrics) Register() {
-	for k, g := range m.gauges {
-		fmt.Printf("Register Prometheus Gauge: %s\n", k)
-		prometheus.MustRegister(g)
-	}
-	for k, c := range m.counter {
-		fmt.Printf("Register Prometheus Counter: %s\n", k)
-		prometheus.MustRegister(c)
-	}
-}
-
-var addr = flag.String("listen-address", ":8080", "The address to listen on for HTTP requests.")
-
-
-func startDaemon(m Metrics) {
+func startDaemon(m prom.Metrics) {
 	var stdoutBuf, stderrBuf bytes.Buffer
 
 	cmd := exec.Command("./rCUDAd", "-iv")
@@ -74,7 +34,7 @@ func startDaemon(m Metrics) {
 		for scanner.Scan() {
 			line := scanner.Text()
 			// Log the stdout
-			m.gauges["log_count"].Inc()
+			m.CounterInc("log_count")
 			fmt.Println(line)
 		}
 	}()
@@ -83,7 +43,7 @@ func startDaemon(m Metrics) {
 		for scanner.Scan() {
 			line := scanner.Text()
 			// Log the stderr
-			m.gauges["log_count"].Inc()
+			m.CounterInc("log_count")
 			fmt.Println(line)
 		}
 	}()
@@ -99,21 +59,38 @@ func startDaemon(m Metrics) {
 	fmt.Printf("\nout:\n%s\nerr:\n%s\n", outStr, errStr)
 }
 
-func startProm() {
-	flag.Parse()
+func startProm(ctx *cli.Context) {
+	addr := ctx.String("listen-addr")
 	http.Handle("/metrics", promhttp.Handler())
-	log.Fatal(http.ListenAndServe(*addr, nil))
+	log.Fatal(http.ListenAndServe(addr, nil))
 
 }
 
-func main() {
+func Run(ctx *cli.Context) {
     // start prometheus
-	go startProm()
-	m := NewMetrics()
+	go startProm(ctx)
+	m := prom.NewMetrics()
 	m.Register()
 	for {
 		startDaemon(m)
-		m.counter["restart_count"].Inc()
+		m.CounterInc("restart_count")
 		time.Sleep(1*time.Second)
 	}
+}
+
+func main() {
+	app := cli.NewApp()
+	app.Name = "Daemon to fire up rCUDAd."
+	app.Usage = "go-rcudad [options]"
+	app.Version = "0.1.1"
+	app.Flags = []cli.Flag{
+		cli.StringFlag{
+			Name:  "listen-addr",
+			Value: "0.0.0.0:8081",
+			Usage: "IP:PORT to bind prometheus",
+			EnvVar: "RCUDAD_PROMETHEUS_ADDR",
+		},
+	}
+	app.Action = Run
+	app.Run(os.Args)
 }
