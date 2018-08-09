@@ -75,7 +75,7 @@ func startDaemon(m Metrics) {
 			line := scanner.Text()
 			// Log the stdout
 			m.gauges["log_count"].Inc()
-			fmt.Printf("stdin>> %s\n", line)
+			fmt.Println(line)
 		}
 	}()
 	go func() {
@@ -84,7 +84,7 @@ func startDaemon(m Metrics) {
 			line := scanner.Text()
 			// Log the stderr
 			m.gauges["log_count"].Inc()
-			fmt.Printf("stderr>> %s\n", line)
+			fmt.Println(line)
 		}
 	}()
 
